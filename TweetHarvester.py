@@ -15,7 +15,8 @@ class TweetHarvester:
         self.listener = TweetListener()
         self.latest_tweet = None
         self.tweetlist = []
-        self.writeblock = 10  # Batch size of tweets before appending to JSON file
+        self.writeblock = 100  # Batch size of tweets before appending to JSON file
+        self.batchcounter = 0
         self.auth = OAuthHandler(consumer_key, consumer_secret)
         self.auth.set_access_token(access_token, access_token_secret)
         self.stream = Stream(self.auth, self.listener)
@@ -24,17 +25,16 @@ class TweetHarvester:
             json.dump([], f)
 
     def get_batches(self):
-        counter = 0
-        while counter < self.writeblock:
+        tweetcounter = 0
+        while tweetcounter < self.writeblock:
             if self.listener.latest_tweet is False:
                 print("RATE-LIMITED, STOPPING STREAM")
                 self.stream.disconnect()
                 return False
             elif self.listener.latest_tweet is not None and self.listener.latest_tweet != self.latest_tweet:
-                print(self.listener.latest_tweet)
                 self.tweetlist.append(self.listener.latest_tweet)
                 self.latest_tweet = self.listener.latest_tweet
-                counter += 1
+                tweetcounter += 1
             else:
                 pass
         else:
@@ -44,6 +44,8 @@ class TweetHarvester:
             with open('tweets.json', 'w') as f:
                 json.dump(data, f)
             self.tweetlist = []
+            self.batchcounter += 1
+            print("{} tweets harvested".format(self.writeblock * self.batchcounter))
             return True
 
     def harvest(self, timer):
@@ -54,7 +56,7 @@ class TweetHarvester:
                 break
         else:
             self.stream.disconnect()
-            print("ALL FINISHED.")
+            print("ALL FINISHED. {} TOTAL TWEETS HARVESTED.".format(self.writeblock * self.batchcounter))
 
 class TweetListener(StreamListener):
     """
@@ -74,7 +76,9 @@ class TweetListener(StreamListener):
             geo = tweet['geo'] if tweet['geo'] is not None else "none"
             place = tweet['place'] if tweet['place'] is not None else "none"
             tweet_deets = {'text': text, 'user': user, 'place': place, 'geo': geo, 'coordinates': coordinates}
-            self.latest_tweet = tweet
+            # Uncomment this line to filter each tweet to only the relevant fields
+            #self.latest_tweet = tweet_deets
+            self.latest_tweet = tweet  # Harvest the full tweet
         return True
 
 
